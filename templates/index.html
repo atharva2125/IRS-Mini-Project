@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IR Search Engine</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Information Retrieval Search Engine</h1>
+            <p>TF-IDF & BM25 Ranking System</p>
+        </header>
+
+        <div class="metrics-dashboard" id="metrics">
+            <h3>System Metrics</h3>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="total-docs">0</div>
+                    <div class="metric-label">Documents</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="vocab-size">0</div>
+                    <div class="metric-label">Vocabulary</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="indexed-terms">0</div>
+                    <div class="metric-label">Indexed Terms</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="results-count">0</div>
+                    <div class="metric-label">Results</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-panel">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="Enter your search query...">
+                <button onclick="addDocument()" class="btn-primary">+ Add Document</button>
+            </div>
+            
+            <div class="filters">
+                <label>
+                    Ranking Method:
+                    <select id="ranking-method">
+                        <option value="tfidf">TF-IDF</option>
+                        <option value="bm25">BM25</option>
+                    </select>
+                </label>
+                
+                <label>
+                    Category:
+                    <select id="category-filter">
+                        <option value="all">All</option>
+                    </select>
+                </label>
+            </div>
+
+            <div id="preprocessed-query" class="preprocessed"></div>
+        </div>
+
+        <div id="add-form" class="add-form hidden">
+            <h3>Add New Document</h3>
+            <input type="text" id="new-title" placeholder="Title *" required>
+            <input type="text" id="new-author" placeholder="Author *" required>
+            <input type="number" id="new-year" placeholder="Year *" required>
+            <input type="text" id="new-category" placeholder="Category *" required>
+            <input type="text" id="new-tags" placeholder="Tags (comma separated)">
+            <textarea id="new-description" placeholder="Description *" rows="4" required></textarea>
+            <div class="form-actions">
+                <button onclick="submitDocument()" class="btn-success">Add Document</button>
+                <button onclick="cancelAdd()" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+
+        <div class="results-info">
+            <span id="results-text">0 documents found</span>
+        </div>
+
+        <div id="results" class="results-container"></div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
