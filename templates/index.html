@@ -82,6 +82,9 @@
         <div id="results" class="results-container"></div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        const API_KEY = "{{ api_key }}";
+    </script>
+    <script src="{{ url_for('static', filename='css/js/script.js') }}"></script>
 </body>
 </html>

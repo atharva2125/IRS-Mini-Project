@@ -1,11 +1,15 @@
 let currentQuery = '';
 
-// Initialize
 document.addEventListener('DOMContentLoaded', () => {
     loadMetrics();
     loadDocuments();
-    
+
     document.getElementById('search-input').addEventListener('input', debounce(performSearch, 300));
+    document.getElementById('search-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
     document.getElementById('ranking-method').addEventListener('change', performSearch);
     document.getElementById('category-filter').addEventListener('change', performSearch);
 });
@@ -24,14 +28,11 @@ function debounce(func, wait) {
 
 async function loadMetrics() {
     try {
-        const response = await fetch('/api/metrics');
+        const response = await fetch('/api/metrics', {headers: {'x-api-key': API_KEY}});
         const data = await response.json();
-        
         document.getElementById('total-docs').textContent = data.total_documents;
         document.getElementById('vocab-size').textContent = data.vocabulary_size;
         document.getElementById('indexed-terms').textContent = data.indexed_terms;
-        
-        // Update category filter
         const categoryFilter = document.getElementById('category-filter');
         categoryFilter.innerHTML = '<option value="all">All</option>';
         data.categories.forEach(cat => {
@@ -53,21 +54,16 @@ async function performSearch() {
     const query = document.getElementById('search-input').value;
     const method = document.getElementById('ranking-method').value;
     const category = document.getElementById('category-filter').value;
-    
     try {
         const response = await fetch('/api/search', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'x-api-key': API_KEY},
             body: JSON.stringify({ query, method, category })
         });
-        
         const data = await response.json();
         displayResults(data.results);
-        
         document.getElementById('results-count').textContent = data.total;
         document.getElementById('results-text').textContent = `${data.total} document(s) found`;
-        
-        // Show preprocessed query
         const preprocessedDiv = document.getElementById('preprocessed-query');
         if (query && data.preprocessed_query.length > 0) {
             preprocessedDiv.textContent = `Preprocessed Query: ${data.preprocessed_query.join(', ')}`;
@@ -82,7 +78,6 @@ async function performSearch() {
 
 function displayResults(results) {
     const container = document.getElementById('results');
-    
     if (results.length === 0) {
         container.innerHTML = `
             <div class="no-results">
@@ -92,12 +87,10 @@ function displayResults(results) {
         `;
         return;
     }
-    
     container.innerHTML = results.map(result => {
         const doc = result.document;
         const score = result.score.toFixed(4);
         const matched = result.matched_terms.slice(0, 3).join(', ');
-        
         return `
             <div class="result-card">
                 <div class="result-header">
@@ -112,15 +105,12 @@ function displayResults(results) {
                     </div>
                     <button class="btn-delete" onclick="deleteDocument(${doc.id})">Delete</button>
                 </div>
-                
                 <div class="result-meta">
                     <span>👤 ${doc.author}</span>
                     <span>📅 ${doc.year}</span>
                     <span>📁 ${doc.category}</span>
                 </div>
-                
                 <div class="result-description">${doc.description}</div>
-                
                 <div class="result-tags">
                     ${doc.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
                 </div>
@@ -156,19 +146,16 @@ async function submitDocument() {
         tags: document.getElementById('new-tags').value,
         description: document.getElementById('new-description').value
     };
-    
     if (!doc.title || !doc.author || !doc.year || !doc.category || !doc.description) {
         alert('Please fill in all required fields');
         return;
     }
-    
     try {
         await fetch('/api/documents', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'x-api-key': API_KEY},
             body: JSON.stringify(doc)
         });
-        
         cancelAdd();
         loadMetrics();
         performSearch();
@@ -179,9 +166,8 @@ async function submitDocument() {
 
 async function deleteDocument(id) {
     if (!confirm('Are you sure you want to delete this document?')) return;
-    
     try {
-        await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+        await fetch(`/api/documents/${id}`, { method: 'DELETE', headers: {'x-api-key': API_KEY} });
         loadMetrics();
         performSearch();
     } catch (error) {

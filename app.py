@@ -1,12 +1,14 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, abort, send_from_directory
 from flask_cors import CORS
-import json
 import re
 from collections import defaultdict
 import math
+from functools import wraps
 
 app = Flask(__name__)
 CORS(app)
+
+API_KEY = "MY_SECRET_KEY"  # <-- Change this to your desired key!
 
 # Simple stopwords list
 STOPWORDS = {
@@ -64,6 +66,15 @@ DOCUMENTS = [
     }
 ]
 
+def require_api_key(view_function):
+    @wraps(view_function)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('x-api-key') or request.args.get('api_key')
+        if api_key != API_KEY:
+            abort(401, description="Unauthorized: Invalid API Key")
+        return view_function(*args, **kwargs)
+    return decorated_function
+
 class IRSystem:
     def __init__(self, documents):
         self.documents = documents
@@ -73,11 +84,9 @@ class IRSystem:
         self.build_index()
     
     def tokenize(self, text):
-        """Simple tokenization"""
         return re.findall(r'\w+', text.lower())
     
     def stem(self, word):
-        """Simple stemming"""
         if len(word) <= 3:
             return word
         if word.endswith('ing'):
@@ -89,13 +98,11 @@ class IRSystem:
         return word
     
     def preprocess(self, text):
-        """Tokenize, remove stopwords, and stem"""
         tokens = self.tokenize(text)
         tokens = [self.stem(token) for token in tokens if token not in STOPWORDS]
         return tokens
     
     def build_index(self):
-        """Build inverted index"""
         for doc in self.documents:
             content = f"{doc['title']} {doc['description']} {' '.join(doc['tags'])}"
             tokens = self.preprocess(content)
@@ -108,17 +115,14 @@ class IRSystem:
                 self.inverted_index[token].append(doc['id'])
     
     def calculate_tf(self, term, tokens):
-        """Calculate term frequency"""
         count = tokens.count(term)
         return count / len(tokens) if tokens else 0
     
     def calculate_idf(self, term):
-        """Calculate inverse document frequency"""
         docs_with_term = len(self.inverted_index.get(term, []))
         return math.log((len(self.documents) + 1) / (docs_with_term + 1)) + 1
     
     def calculate_tfidf_vector(self, tokens):
-        """Calculate TF-IDF vector for tokens"""
         vector = {}
         for term in self.vocabulary:
             tf = self.calculate_tf(term, tokens)
@@ -127,75 +131,56 @@ class IRSystem:
         return vector
     
     def cosine_similarity(self, vec1, vec2):
-        """Calculate cosine similarity between two vectors"""
         dot_product = sum(vec1.get(term, 0) * vec2.get(term, 0) for term in self.vocabulary)
         mag1 = math.sqrt(sum(val ** 2 for val in vec1.values()))
         mag2 = math.sqrt(sum(val ** 2 for val in vec2.values()))
-        
         if mag1 == 0 or mag2 == 0:
             return 0
         return dot_product / (mag1 * mag2)
     
     def bm25_score(self, query_tokens, doc_id, k1=1.5, b=0.75):
-        """Calculate BM25 score"""
         doc_tokens = self.doc_tokens[doc_id]
         doc_length = len(doc_tokens)
         avg_doc_length = sum(len(tokens) for tokens in self.doc_tokens.values()) / len(self.doc_tokens)
-        
         score = 0
         for term in query_tokens:
             if term not in doc_tokens:
                 continue
-            
             term_freq = doc_tokens.count(term)
             docs_with_term = len(self.inverted_index.get(term, []))
             idf = math.log((len(self.documents) - docs_with_term + 0.5) / (docs_with_term + 0.5) + 1)
-            
             numerator = term_freq * (k1 + 1)
             denominator = term_freq + k1 * (1 - b + b * (doc_length / avg_doc_length))
             score += idf * (numerator / denominator)
-        
         return score
     
     def search(self, query, method='tfidf', category='all'):
-        """Search documents using specified ranking method"""
         query_tokens = self.preprocess(query)
-        
         if not query_tokens:
             return []
-        
-        # Get candidate documents
         candidate_ids = set()
         for token in query_tokens:
             if token in self.inverted_index:
                 candidate_ids.update(self.inverted_index[token])
-        
-        # Score documents
         results = []
         for doc_id in candidate_ids:
             doc = next((d for d in self.documents if d['id'] == doc_id), None)
             if not doc:
                 continue
-            
             if category != 'all' and doc['category'] != category:
                 continue
-            
             if method == 'tfidf':
                 query_vec = self.calculate_tfidf_vector(query_tokens)
                 doc_vec = self.calculate_tfidf_vector(self.doc_tokens[doc_id])
                 score = self.cosine_similarity(query_vec, doc_vec)
             else:  # bm25
                 score = self.bm25_score(query_tokens, doc_id)
-            
             matched_terms = [token for token in query_tokens if token in self.doc_tokens[doc_id]]
-            
             results.append({
                 'document': doc,
                 'score': score,
                 'matched_terms': matched_terms
             })
-        
-        # Sort by score
         results.sort(key=lambda x: x['score'], reverse=True)
         return results
 
@@ -204,37 +189,36 @@ ir_system = IRSystem(DOCUMENTS)
 
 @app.route('/')
 def index():
-    """Serve the main page"""
-    return render_template('index.html')
+    return render_template('index.html', api_key=API_KEY)
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('static', filename)
 
 @app.route('/api/documents', methods=['GET'])
+@require_api_key
 def get_documents():
-    """Get all documents"""
     return jsonify({
         'documents': DOCUMENTS,
         'total': len(DOCUMENTS)
     })
 
 @app.route('/api/search', methods=['POST'])
+@require_api_key
 def search():
-    """Search documents"""
     data = request.json
     query = data.get('query', '')
     method = data.get('method', 'tfidf')
     category = data.get('category', 'all')
-    
     if not query:
-        # Return all documents if no query
         filtered = DOCUMENTS if category == 'all' else [d for d in DOCUMENTS if d['category'] == category]
         return jsonify({
             'results': [{'document': d, 'score': 0, 'matched_terms': []} for d in filtered],
             'total': len(filtered),
             'preprocessed_query': []
         })
-    
     results = ir_system.search(query, method, category)
     preprocessed = ir_system.preprocess(query)
-    
     return jsonify({
         'results': results,
         'total': len(results),
@@ -242,11 +226,10 @@ def search():
     })
 
 @app.route('/api/documents', methods=['POST'])
+@require_api_key
 def add_document():
-    """Add a new document"""
     data = request.json
-    new_id = max(doc['id'] for doc in DOCUMENTS) + 1
-    
+    new_id = max(doc['id'] for doc in DOCUMENTS) + 1 if DOCUMENTS else 1
     new_doc = {
         'id': new_id,
         'title': data['title'],
@@ -256,30 +239,23 @@ def add_document():
         'tags': [tag.strip() for tag in data.get('tags', '').split(',') if tag.strip()],
         'description': data['description']
     }
-    
     DOCUMENTS.append(new_doc)
-    
-    # Rebuild index
     global ir_system
     ir_system = IRSystem(DOCUMENTS)
-    
     return jsonify({'success': True, 'document': new_doc})
 
 @app.route('/api/documents/<int:doc_id>', methods=['DELETE'])
+@require_api_key
 def delete_document(doc_id):
-    """Delete a document"""
     global DOCUMENTS
     DOCUMENTS = [d for d in DOCUMENTS if d['id'] != doc_id]
-    
-    # Rebuild index
     global ir_system
     ir_system = IRSystem(DOCUMENTS)
-    
     return jsonify({'success': True})
 
 @app.route('/api/metrics', methods=['GET'])
+@require_api_key
 def get_metrics():
-    """Get system metrics"""
     return jsonify({
         'total_documents': len(DOCUMENTS),
         'vocabulary_size': len(ir_system.vocabulary),

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Digital Library Search</title>
+</head>
+<body>
+    <h1>Digital Library Search</h1>
+    <form method="post">
+        <input type="text" name="query" value="{{ query }}" placeholder="Enter search query">
+        <input type="submit" value="Search">
+    </form>
+    {% if results %}
+        <h2>Results</h2>
+        <ul>
+        {% for doc, score in results %}
+            <li>{{ doc }} (Score: {{ score }})</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+</body>
+</html>
